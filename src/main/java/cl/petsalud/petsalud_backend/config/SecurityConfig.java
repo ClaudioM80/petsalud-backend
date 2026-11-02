@@ -1,48 +1,65 @@
 package cl.petsalud.petsalud_backend.config;
 
+import cl.petsalud.petsalud_backend.security.JwtAuthFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.Customizer;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity; // <-- Importante
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity // <-- ¡ESTA ES LA LÍNEA QUE FALTABA! Habilita los @PreAuthorize
 public class SecurityConfig {
 
+    private final JwtAuthFilter jwtAuthFilter;
+
+    // Inyectamos nuestro filtro JWT
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter) {
+        this.jwtAuthFilter = jwtAuthFilter;
+    }
+
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+            // 1. Deshabilitar CSRF (común en APIs REST stateless)
+            .csrf(csrf -> csrf.disable())
+            
+            // 2. Definir las reglas de autorización de rutas
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/public/**").permitAll() // Endpoint público
-                .anyRequest().authenticated() // Todo lo demás requiere login
+                // Rutas públicas: Login y Registro
+                .requestMatchers("/api/auth/**").permitAll() 
+                // Cualquier otra ruta requiere autenticación
+                .anyRequest().authenticated() 
             )
-            .httpBasic(Customizer.withDefaults()); // <-- Línea corregida
+            
+            // 3. Configurar la aplicación como STATELESS (sin estado, sin sesiones)
+            .sessionManagement(session -> session
+                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+            )
+            
+            // 4. Añadir nuestro filtro JWT antes del filtro estándar
+            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
     @Bean
-    public UserDetailsService userDetailsService() {
-        // Creamos un usuario de prueba: admin / admin123 con rol ADMIN
-        UserDetails admin = User.builder()
-                .username("admin")
-                .password("{noop}admin123") // {noop} significa que no se encripta (solo para pruebas)
-                .roles("ADMIN")
-                .build();
+    public PasswordEncoder passwordEncoder() {
+        // Usamos BCrypt para encriptar las contraseñas en la base de datos
+        return new BCryptPasswordEncoder();
+    }
 
-        // Creamos un usuario de prueba: cliente / cliente123 con rol USER
-        UserDetails cliente = User.builder()
-                .username("cliente")
-                .password("{noop}cliente123")
-                .roles("USER")
-                .build();
-
-        return new InMemoryUserDetailsManager(admin, cliente);
+    // Bean para validar usuario y contraseña durante el Login
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+        return config.getAuthenticationManager();
     }
 }
