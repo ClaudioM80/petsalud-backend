@@ -36,33 +36,36 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         final String jwt;
         final String username;
 
-        // Si no hay header o no empieza con "Bearer ", dejamos pasar (Spring Security lo rechazará si es ruta protegida)
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        // Extraemos el token (quitando la palabra "Bearer ")
         jwt = authHeader.substring(7);
-        username = jwtService.extractUsername(jwt);
-
-        // Si tenemos el username y el usuario no está autenticado aún en el contexto
-        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
-
-            // Si el token es válido, autenticamos al usuario en el sistema
-            if (jwtService.isTokenValid(jwt, userDetails)) {
-                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        userDetails,
-                        null,
-                        userDetails.getAuthorities()
-                );
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authToken);
-            }
-        }
         
-        // Continuamos con el siguiente filtro
+        try {
+            username = jwtService.extractUsername(jwt);
+            
+            // Si hay un usuario en el token y no está autenticado en el contexto
+            if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
+                
+                if (jwtService.isTokenValid(jwt, userDetails)) {
+                    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                            userDetails,
+                            null,
+                            userDetails.getAuthorities()
+                    );
+                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                    System.out.println("✅ AUTENTICACIÓN EXITOSA PARA: " + username);
+                }
+            }
+        } catch (Exception e) {
+            System.out.println("❌ ERROR EN FILTRO: " + e.getMessage());
+        }
+
+        // ¡ESTA ES LA CLAVE! Siempre dejamos que la petición siga su curso.
         filterChain.doFilter(request, response);
     }
 }

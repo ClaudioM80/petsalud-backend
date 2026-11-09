@@ -17,7 +17,7 @@ public class TestController {
 
     // Solo los CLIENTES pueden entrar aquí
     @GetMapping("/cliente")
-    @PreAuthorize("hasRole('CLIENTE')")
+    @PreAuthorize("hasRole('CLIENTE')") // <-- CAMBIA hasAuthority POR hasRole
     public String cliente() {
         return "Hola CLIENTE, este es tu panel de mascotas.";
     }
